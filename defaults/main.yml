@@ -1,0 +1,17 @@
+---
+# Here is define variables related with nrpe path
+# Which version of OpenSSL do you want use
+openssl_version: '1.0.2n'
+
+# Where path do you want to locate
+openssl_directory: /usr/local/openssl
+
+# Upload the path that the source packages place
+nrpe_temp_installation: /tmp/nrpe
+
+# Nagios plugin version
+nagios_plugins_version: '2.2.1'
+
+# Which NRPE main version do you want to use 
+nrpe_version: '3.2.1'
+

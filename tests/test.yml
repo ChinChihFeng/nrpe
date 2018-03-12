@@ -1,0 +1,9 @@
+---
+- hosts: all
+  gather_facts: yes
+  become: true
+  roles:
+    - role: nrpe
+  vars:
+    nagios_server_list:
+      - { hostname: "nagios.localhost.localhost", ip: "192.168.1.2" }

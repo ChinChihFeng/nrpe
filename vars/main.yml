@@ -1,0 +1,4 @@
+default_packages: ["libtool", "perl-core", "zlib-devel", "rsync"]
+
+#nagios_master_list:
+# - { hostname: "nagios.oa.style.me", ip: "192.168.168.168" }

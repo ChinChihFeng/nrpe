@@ -1,0 +1,223 @@
+---
+- name: Check the existence of directory or not 
+  stat:
+    path: "{{ nrpe_temp_installation }}"
+  register: nti
+  tags:
+    - package
+
+- fail:
+    msg: "The directory has already exist!"
+  when: nti.stat.isdir is defined
+  tags:
+    - package
+
+- name: Create the temp directory
+  file:
+    path: "{{ nrpe_temp_installation }}"
+    state: directory
+  when: nti.stat.isdir is not defined
+  tags:
+    - package
+
+- name: Download openssl tarball {{ openssl_version }}
+  get_url:
+    url: https://www.openssl.org/source/openssl-{{ openssl_version }}.tar.gz
+    dest: "{{ nrpe_temp_installation }}"
+  tags:
+    - package
+
+- name: Untar openssl source package
+  unarchive:
+    src: "{{ nrpe_temp_installation }}/openssl-{{ openssl_version }}.tar.gz"
+    dest: "{{ nrpe_temp_installation }}"
+    remote_src: yes
+  tags:
+    - package
+    
+- name: Install packages which are used for openssl
+  yum:
+    name: "{{ default_packages }}"
+    state: latest
+  tags:
+    - package 
+
+- name: Setting openssl parameters within the configuration
+  shell: |
+    ./config --prefix={{ openssl_directory }} --openssldir={{ openssl_directory }} shared zlib
+  args:
+    chdir: "{{ nrpe_temp_installation }}/openssl-{{ openssl_version }}"
+  tags:
+    - package
+    
+- name: Complie openssl from source
+  shell: |
+    make
+    make test
+    make install
+  args:
+    chdir: "{{ nrpe_temp_installation }}/openssl-{{ openssl_version }}"
+  tags:
+    - package
+    
+- name: Replace a symbolic link to replace openssl version
+  file:
+    src: "{{ openssl_directory }}/bin/openssl"
+    dest: /usr/bin/openssl
+    force: yes
+    state: link
+  tags:
+    - package
+  
+- name: Download NRPE from the Internet
+  get_url:
+    url: https://github.com/NagiosEnterprises/nrpe/releases/download/nrpe-{{ nrpe_version }}/nrpe-{{ nrpe_version }}.tar.gz
+    dest: "{{ nrpe_temp_installation }}"
+  tags:
+    - package
+    
+- name: Untar nrpe source package
+  unarchive:
+    src: "{{ nrpe_temp_installation }}/nrpe-{{ nrpe_version }}.tar.gz"
+    dest: "{{ nrpe_temp_installation }}"
+    remote_src: yes
+  tags:
+    - package
+    
+- name: Setting nrpe parameters within the configuration
+  shell: |
+    ./configure --with-init-type=systemd --with-ssl={{ openssl_directory }} --enable-command-args
+  args:
+    chdir: "{{ nrpe_temp_installation }}/nrpe-{{ nrpe_version }}"
+  tags:
+    - package
+  when: ansible_distribution_version.split(".")[0] == '7'
+   
+- name: Setting nrpe parameters within the configuration
+  shell: |
+    ./configure --with-ssl={{ openssl_directory }} --enable-command-args
+  args:
+    chdir: "{{ nrpe_temp_installation }}/nrpe-{{ nrpe_version }}"
+  tags:
+    - package
+  when: ansible_distribution_version.split(".")[0] == '6'
+
+- name: Create a file making system find openssl library
+  lineinfile:
+    path: "/etc/ld.so.conf.d/openssl-{{ openssl_version }}.conf"
+    line: "{{ openssl_directory }}/lib"
+    create: yes
+    owner: root
+    group: root
+    mode: 0644
+    state: present
+  tags:
+    - package
+    
+- name: Execute command that the library can be loaded
+  command: /usr/sbin/ldconfig
+  tags:
+    - package
+  when: ansible_distribution_version.split(".")[0] == '7'
+
+- name: Execute command that the library can be loaded
+  command: /sbin/ldconfig
+  tags:
+    - package
+  when: ansible_distribution_version.split(".")[0] == '6'
+
+- name: Complie nrpe from source
+  shell: |
+    make all
+    make install-groups-users
+    make install
+    make install-plugin
+    make install-config
+    make install-init
+  args:
+    chdir: "{{ nrpe_temp_installation }}/nrpe-{{ nrpe_version }}"
+  tags:
+    - package
+
+- name: Download nagios plugin from the Internet
+  get_url:
+    url: https://nagios-plugins.org/download/nagios-plugins-{{ nagios_plugins_version }}.tar.gz
+    dest: "{{ nrpe_temp_installation }}"
+  tags:
+    - package
+    
+- name: Untar nagios plugin from source package
+  unarchive:
+    src: "{{ nrpe_temp_installation }}/nagios-plugins-{{ nagios_plugins_version }}.tar.gz"
+    dest: "{{ nrpe_temp_installation }}"
+    remote_src: yes
+  tags:
+    - package
+    
+- name: Setting nagios plugin parameters within the configuration
+  shell: |
+    ./configure
+  args:
+    chdir: "{{ nrpe_temp_installation }}/nagios-plugins-{{ nagios_plugins_version }}"
+  tags:
+    - package
+    
+- name: Complie nagios plugin from source
+  shell: |
+    make && make install
+  args:
+    chdir: "{{ nrpe_temp_installation }}/nagios-plugins-{{ nagios_plugins_version }}"
+  tags:
+    - package
+    
+- name: Copy additional plugins
+  synchronize:
+    src: plugin/
+    dest: /usr/local/nagios/libexec/
+    recursive: yes
+  tags:
+    - package
+    - configuration
+  
+- name: Change all file permission under nagios root directory
+  file:
+    path: /usr/local/nagios
+    owner: nagios
+    group: nagios
+    recurse: yes
+  tags:
+    - package
+    - configuration
+   
+- name: Replace definitions within the configuration
+  template:
+    src: nrpe.j2
+    dest: /usr/local/nagios/etc/nrpe.cfg
+    owner: nagios
+    group: nagios
+    mode: 0644
+  tags:
+    - package
+    - configuration
+  notify:
+    - restart nrpe
+
+- name: Be sure nrpe service started and enabled
+  service:
+    name: nrpe
+    state: started
+    enabled: yes
+  tags:
+    - package
+    - configuration
+
+#- name: Notifying on Hipchat
+#  hipchat: 
+#    api: "https://hipchat.nogle.on/v2/"
+#    token: 2s6JDAbODvzthW6E0lof2uFr4mDFAHR4AoANp51L
+#    from: Ansible
+#    color: green
+#    room: 6
+#    msg_format: html
+#    msg: "Ansible task (Install Nagios client) finished - {{ ansible_fqdn }}"
+#    validate_certs: no

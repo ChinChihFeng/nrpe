@@ -1,7 +1,7 @@
 ---
 # Here is define variables related with nrpe path
 # Which version of OpenSSL do you want use
-openssl_version: '1.0.2n'
+openssl_version: '1.1.1'
 
 # Where path do you want to locate
 openssl_directory: /usr/local/openssl
